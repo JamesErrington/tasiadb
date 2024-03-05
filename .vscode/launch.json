@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Main",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/tasiadb",
+            "preLaunchTask": "build",
+            "MIMode": "lldb",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug Test",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/${input:testpath}",
+            "preLaunchTask": "find-test",
+            "MIMode": "lldb",
+            "cwd": "${workspaceFolder}"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "testpath",
+            "type": "command",
+            "command": "extension.commandvariable.file.content",
+            "args": {
+                "fileName": "${workspaceFolder}/.cache/zig-test-loc.txt"
+            }
+        }
+    ]
+}

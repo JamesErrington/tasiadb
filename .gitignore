@@ -1,0 +1,7 @@
+build/
+zig-cache/
+
+data/
+.cache/
+
+.DS_Store
