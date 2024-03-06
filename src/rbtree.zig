@@ -20,18 +20,21 @@ const Node = struct {
     right: ?*Node = null,
     color: Color = .Red,
 };
+const NODE_SIZE = @sizeOf(Node);
 
 root: ?*Node = null,
+size: usize = 0,
 
-pub fn deinit(self: Tree, allocator: Allocator) void {
-    deinit_subtree(self.root, allocator);
+pub fn deinit(self: *Tree, allocator: Allocator) void {
+    deinit_subtree(allocator, self.root);
+    self.size = 0;
 }
 
-fn deinit_subtree(root: ?*const Node, allocator: Allocator) void {
+fn deinit_subtree(allocator: Allocator, root: ?*const Node) void {
     if (root) |node| {
-        deinit_subtree(node.left, allocator);
-        deinit_subtree(node.right, allocator);
-        allocator.destroy(node);
+        deinit_subtree(allocator, node.left);
+        deinit_subtree(allocator, node.right);
+        free_node(allocator, node);
     }
 }
 
@@ -52,17 +55,17 @@ fn search_subtree(root: ?*Node, key: K) ?*const Node {
 }
 
 pub fn insert(self: *Tree, allocator: Allocator, key: K, value: V) Allocator.Error!void {
-    var temp = Node{ .key = key, .value = value };
+	const node = try alloc_node(allocator, key, value);
+	self.size += NODE_SIZE + key.len + value.len;
 
-    const edge = find_empty_edge(&self.root, &temp);
-    if (edge.* == &temp) {
-        return;
+    const edge = find_node_edge(&self.root, node);
+    if (edge.*) |curr| {
+    	self.size -= (NODE_SIZE + curr.key.len + curr.value.len);
+        replace_value(allocator, curr, node);
+	    return;
     }
 
-    const node = try allocator.create(Node);
-    node.* = .{ .key = key, .value = value, .parent = temp.parent };
     edge.* = node;
-
     if (edge == &self.root) {
         assert(node.parent == null);
         node.color = .Black;
@@ -120,6 +123,27 @@ pub fn insert(self: *Tree, allocator: Allocator, key: K, value: V) Allocator.Err
     self.root.?.color = .Black;
 }
 
+fn alloc_node(allocator: Allocator, key: K, value: V) Allocator.Error!*Node {
+	const node = try allocator.create(Node);
+	const key_alloc = try allocator.dupe(u8, key);
+	const value_alloc = try allocator.dupe(u8, value);
+	node.* = .{ .key = key_alloc, .value = value_alloc };
+	return node;
+}
+
+fn free_node(allocator: Allocator, node: *const Node) void {
+	allocator.free(node.key);
+	allocator.free(node.value);
+	allocator.destroy(node);
+}
+
+fn replace_value(allocator: Allocator, old: *Node, new: *Node) void {
+        allocator.free(old.value);
+        old.value = new.value;
+        allocator.free(new.key);
+        allocator.destroy(new);
+}
+
 fn rotate_left(self: *Tree, x: *Node) void {
     assert(x.right != null);
     const y = x.right.?;
@@ -166,7 +190,7 @@ fn rotate_right(self: *Tree, x: *Node) void {
     x.parent = y;
 }
 
-fn find_empty_edge(root: *?*Node, node: *Node) *?*Node {
+fn find_node_edge(root: *?*Node, node: *Node) *?*Node {
     var edge: *?*Node = root;
 
     if (root.*) |_| {
@@ -182,33 +206,12 @@ fn find_empty_edge(root: *?*Node, node: *Node) *?*Node {
                     edge = &(curr_node.right);
                     curr = curr_node.right;
                 },
-                .eq => {
-                    curr_node.*.value = node.value;
-                    return @ptrCast(@constCast(&node));
-                },
+                .eq => return &curr,
             }
         }
     }
 
     return edge;
-}
-
-fn insert_into(root: ?*Node, node: *Node, allocator: Allocator) *Node {
-    if (root) |rootnode| {
-        node.parent = rootnode;
-        switch (std.mem.order(u8, node.key, rootnode.key)) {
-            .lt => rootnode.left = insert_into(rootnode.left, node, allocator),
-            .gt => rootnode.right = insert_into(rootnode.right, node, allocator),
-            .eq => {
-                rootnode.value = node.value;
-                allocator.destroy(node);
-            }
-        }
-
-        return rootnode;
-    }
-
-    return node;
 }
 
 pub fn iterator(self: Tree) Iterator {
@@ -253,13 +256,16 @@ const Iterator = struct {
 const t = std.testing;
 test "Deinit" {
     var tree = Tree{};
+    defer tree.deinit(t.allocator);
 
     try tree.insert(t.allocator, "7", "seven");
+    try t.expect(tree.size == NODE_SIZE + 1 + 5);
     try tree.insert(t.allocator, "4", "four");
+    try t.expect(tree.size == (2 * NODE_SIZE) + (1 + 5) + (1 + 4));
     try tree.insert(t.allocator, "5", "five");
+    try t.expect(tree.size == (3 * NODE_SIZE) + (1 + 5) + (1 + 4) + (1 + 4));
     try tree.insert(t.allocator, "5", "cinq");
-
-    tree.deinit(t.allocator);
+    try t.expect(tree.size == (3 * NODE_SIZE) + (1 + 5) + (1 + 4) + (1 + 4));
 }
 
 test "Iterator" {
@@ -390,4 +396,6 @@ test "Red Black Insertion" {
     try t.expect(tree.root.?.right.?.right.?.right.?.color == .Red);
     try t.expect(std.mem.eql(u8, tree.root.?.right.?.right.?.left.?.key, "r"));
     try t.expect(tree.root.?.right.?.right.?.left.?.color == .Red);
+    
+    try t.expect(tree.size == (7 * NODE_SIZE) + 7);
 }
