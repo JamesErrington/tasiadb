@@ -137,52 +137,60 @@ pub const WAL = struct {
 		}
 
 		pub fn process_log(self: Reader) !void {
-			var header = [_]u8{0} ** LOG_HEADER_SIZE;
-			const header_read = try std.os.pread(self.file.handle, &header, 0);
-			if (header_read != LOG_HEADER_SIZE) {
-				return error.IncompleteRead;
-			}
+			var crc32 = Crc32.init();
 
 			var index: usize = 0;
-			const log_type: LogType = @enumFromInt(header[index]);
-			index += 1;
+			while (true) {
+				var header = [_]u8{0} ** LOG_HEADER_SIZE;
+				const header_read = try std.os.pread(self.file.handle, &header, index);
+				if (header_read != LOG_HEADER_SIZE) {
+					return;
+				}
+				index += LOG_HEADER_SIZE;
 
-			switch (log_type) {
-				.Update => {
-					const key_len_bytes = header[index..index+4];
-				    index += 4;
-				    const key_len = std.mem.readVarInt(u32, key_len_bytes, .little);
-					assert(key_len > 0 and key_len < MAX_KEY_LEN);
+				const log_type: LogType = @enumFromInt(header[0]);
+				switch (log_type) {
+					.Update => {
+						const key_len_bytes = header[1..5];
+					    const key_len = std.mem.readVarInt(u32, key_len_bytes, .little);
+						assert(key_len > 0 and key_len < MAX_KEY_LEN);
 
-					const value_len_bytes = header[index..index+4];
-				    index += 4;
-				    const value_len = std.mem.readVarInt(u32, value_len_bytes, .little);
-					// TODO: handle 0 length value
-					assert(value_len > 0 and value_len < MAX_VAL_LEN);
+						const value_len_bytes = header[5..9];
+					    const value_len = std.mem.readVarInt(u32, value_len_bytes, .little);
+						// TODO: handle 0 length value
+						assert(value_len > 0 and value_len < MAX_VAL_LEN);
 
-					const buffer = try self.allocator.alloc(u8, key_len + value_len);
-					defer self.allocator.free(buffer);
+						const data_size = key_len + value_len;
+						const buffer = try self.allocator.alloc(u8, data_size);
+						defer self.allocator.free(buffer);
 
-					const read = try std.os.pread(self.file.handle, buffer, index);
-					if (read != key_len + value_len) {
-						return error.IncompleteRead;
-					}
+						const read = try std.os.pread(self.file.handle, buffer, index);
+						if (read != data_size) {
+							return error.IncompleteRead;
+						}
+						index += data_size;
+						crc32.update(buffer);
 
-					const key = buffer[0..key_len];
-					const value = buffer[key_len..key_len+value_len];
-					std.debug.print("{s}: {s}\n", .{key, value});
+						const key = buffer[0..key_len];
+						const value = buffer[key_len..data_size];
+						std.debug.print("{s}: {s}\n", .{key, value});
+					},
+					.Commit => {
+						const checksum_bytes = header[1..5];
+						index += 4;
+						const checksum = std.mem.readVarInt(u32, checksum_bytes, .little);
+						if (checksum != crc32.final()) {
+							return error.IncorrectChecksum;
+						}
 
-				},
-				.Commit => {
-					const checksum_bytes = header[index..index+4];
-					index += 4;
-					_ = std.mem.readVarInt(u32, checksum_bytes, .little);
+						// const padding_bytes = header[5..9];
+						// index += 4;
+						// const padding = std.mem.readVarInt(u32, padding_bytes, .little);
+						// assert(padding == 0);
 
-					const padding_bytes = header[index..index+4];
-					index += 4;
-				    const padding = std.mem.readVarInt(u32, padding_bytes, .little);
-					assert(padding == 0);
-				},
+						crc32 = Crc32.init();
+					},
+				}
 			}
 		}
     };
