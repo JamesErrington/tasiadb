@@ -14,20 +14,10 @@
             "name": "Debug Test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/${input:testpath}",
-            "preLaunchTask": "find-test",
+            "program": "${workspaceFolder}/build/bin/${fileBasenameNoExtension}-test",
+            "preLaunchTask": "build-test",
             "MIMode": "lldb",
             "cwd": "${workspaceFolder}"
-        }
-    ],
-    "inputs": [
-        {
-            "id": "testpath",
-            "type": "command",
-            "command": "extension.commandvariable.file.content",
-            "args": {
-                "fileName": "${workspaceFolder}/.cache/zig-test-loc.txt"
-            }
         }
     ]
 }

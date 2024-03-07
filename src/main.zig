@@ -6,6 +6,17 @@ pub fn main() !void {
 	const allocator = gpa.allocator();
 	defer _ = gpa.deinit();
 
+	var db = try tdb.DB.open(allocator, "./data/test");
+	defer db.close();
+	try db.insert("country", "United Kingdom");
+
+
+	const dir = try std.fs.cwd().openDir("./data/test", .{});
+	var reader = try tdb.WAL.Reader.init(allocator, dir);
+    defer reader.deinit();
+
+    try reader.process_log();
+
     // var memtable = tdb.MemTable.init(allocator);
     // defer memtable.deinit();
 
@@ -19,16 +30,16 @@ pub fn main() !void {
     //     std.debug.print("{s}: {s}\n", .{node.key, node.value});
     // }
 
-    var writer = try tdb.WAL.Writer.init(allocator);
-    defer writer.deinit();
+    // var writer = try tdb.WAL.Writer.init(allocator);
+    // defer writer.deinit();
 
-    try writer.log_set("name", "James Errington");
-    try writer.log_set("country", "United Kingdom");
-    try writer.log_set("city", "St Albans");
-    try writer.log_commit();
+    // try writer.log_set("name", "James Errington");
+    // try writer.log_set("country", "United Kingdom");
+    // try writer.log_set("city", "St Albans");
+    // try writer.log_commit();
 
-    var reader = try tdb.WAL.Reader.init(allocator);
-    defer reader.deinit();
+    // var reader = try tdb.WAL.Reader.init(allocator);
+    // defer reader.deinit();
 
-    try reader.process_log();
+    // try reader.process_log();
 }

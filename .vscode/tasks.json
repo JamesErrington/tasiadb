@@ -14,20 +14,12 @@
         {
             "label": "build-test",
             "type": "shell",
-            "command": "zig test --test-no-exec ${file}",
+            "command": "zig test --test-no-exec -femit-bin=build/bin/${fileBasenameNoExtension}-test ${file}",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true
             }
-        },
-        {
-            "label": "find-test",
-            "type": "shell",
-            "command": "find zig-cache -name test | tr -d '\n' > ${workspaceFolder}/.cache/zig-test-loc.txt",
-            "problemMatcher": [],
-            "group": "none",
-            "dependsOn": "build-test"
         }
     ]
 }

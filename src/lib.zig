@@ -4,11 +4,50 @@ const RBTree = @import("./rbtree.zig");
 const Allocator = std.mem.Allocator;
 const ByteList = std.ArrayListUnmanaged(u8);
 const Crc32 = std.hash.Crc32;
+const Dir = std.fs.Dir;
 const File = std.fs.File;
 const assert = std.debug.assert;
 
 const K = []const u8;
 const V = []const u8;
+
+pub const DB = struct {
+	const MEMTABLE_THRESHOLD_BYTES = 1024;
+
+	dir: Dir,
+	memtable: MemTable,
+	wal_writer: WAL.Writer,
+
+	pub fn open(allocator: Allocator, dirname: []const u8) !DB {
+		const cwd = std.fs.cwd();
+
+		try cwd.makePath(dirname);
+		const dir = try cwd.openDir(dirname, .{ .iterate = true });
+
+		return .{
+			.dir = dir,
+			.memtable = MemTable.init(allocator),
+			.wal_writer = try WAL.Writer.init(allocator, dir),
+		};
+	}
+
+	pub fn close(self: *DB) void {
+		self.memtable.deinit();
+		self.wal_writer.deinit();
+		self.dir.close();
+	}
+
+	pub fn insert(self: *DB, key: K, value: V) !void {
+		try self.wal_writer.log_set(key, value);
+		try self.wal_writer.log_commit();
+		try self.memtable.set(key, value);
+
+		if (self.memtable.size_bytes >= MEMTABLE_THRESHOLD_BYTES) {
+			std.debug.print("Time to flush memtable\n", .{});
+		}
+	}
+};
+
 
 pub const MemTable = struct {
     arena: std.heap.ArenaAllocator,
@@ -61,8 +100,8 @@ pub const WAL = struct {
         buffer: ByteList,
         crc32: Crc32,
 
-        pub fn init(allocator: Allocator) !Writer {
-            const file = try std.fs.cwd().createFile("./data/wal.log", .{ .read = false, .truncate = false });
+        pub fn init(allocator: Allocator, dir: Dir) !Writer {
+            const file = try dir.createFile("wal.log", .{ .read = false, .truncate = false });
 
             return .{
                 .file = file,
@@ -123,8 +162,8 @@ pub const WAL = struct {
 	   	file: File,
 		allocator: Allocator,
 
-		pub fn init(allocator: Allocator) !Reader {
-			const file = try std.fs.cwd().openFile("./data/wal.log", .{ .mode = .read_only });
+		pub fn init(allocator: Allocator, dir: Dir) !Reader {
+			const file = try dir.openFile("wal.log", .{ .mode = .read_only });
 
 			return .{
 				.file = file,
@@ -182,11 +221,6 @@ pub const WAL = struct {
 						if (checksum != crc32.final()) {
 							return error.IncorrectChecksum;
 						}
-
-						// const padding_bytes = header[5..9];
-						// index += 4;
-						// const padding = std.mem.readVarInt(u32, padding_bytes, .little);
-						// assert(padding == 0);
 
 						crc32 = Crc32.init();
 					},
