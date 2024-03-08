@@ -4,22 +4,12 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "make build",
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
+            "command": "make build"
         },
         {
             "label": "build-test",
             "type": "shell",
-            "command": "zig test --test-no-exec -femit-bin=build/bin/${fileBasenameNoExtension}-test ${file}",
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
+            "command": "make build_test file=${file}"
         }
     ]
 }

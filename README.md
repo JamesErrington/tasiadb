@@ -1,1 +1,1 @@
-A SQLite-inspired database engine based on a Log-Structed Merge-Tree, written in Zig.
+A SQLite-inspired database engine written in Zig.
